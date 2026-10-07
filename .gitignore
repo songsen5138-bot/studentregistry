@@ -6,3 +6,7 @@
 
 # 개인 메모
 *.txt
+
+# Firebase 도구가 만드는 임시 파일
+.firebase/
+*-debug.log

@@ -1,0 +1,22 @@
+{
+  "hosting": {
+    "site": "studentregistry",
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/*.xlsx",
+      "**/*.xlsm",
+      "**/*.xls",
+      "**/*.csv",
+      "**/*.txt",
+      "**/node_modules/**"
+    ],
+    "headers": [
+      {
+        "source": "**/*.html",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      }
+    ]
+  }
+}
