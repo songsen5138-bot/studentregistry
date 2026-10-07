@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>학생명부 작성 프로그램</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <!-- SheetJS: NEIS 학생명렬표 읽기 -->
+  <script src="assets/vendor/xlsx.full.min.js"></script>
+  <!-- ExcelJS: 서식이 있는 학생명부 엑셀 만들기·합본 -->
+  <script src="assets/vendor/exceljs.min.js"></script>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --panel: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --line: #e3e7ee;
+      --accent: #2563eb;
+      --accent-soft: #e8efff;
+      --danger: #dc2626;
+      --ok: #16a34a;
+      --input-bg: #ffffff;
+      --grid-head: #f8fafc;
+      --shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 4px 16px rgba(15, 23, 42, .06);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #111418;
+        --panel: #1a1e24;
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+        --line: #2c323b;
+        --accent: #60a5fa;
+        --accent-soft: #1e2a3d;
+        --input-bg: #14181d;
+        --grid-head: #20252c;
+        --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #111418; --panel: #1a1e24; --text: #e5e7eb; --muted: #9ca3af; --line: #2c323b;
+      --accent: #60a5fa; --accent-soft: #1e2a3d; --input-bg: #14181d; --grid-head: #20252c;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Noto Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    button, input, select { font: inherit; color: inherit; }
+
+    /* ---------- 상단 ---------- */
+    .topbar {
+      position: sticky; top: 0; z-index: 20;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    .topbar-inner {
+      max-width: 1400px; margin: 0 auto; padding: 12px 16px;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+    }
+    .brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+    .brand h1 { font-size: 20px; margin: 0; font-weight: 800; letter-spacing: -.02em; }
+    .brand span { color: var(--muted); font-size: 13px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .btn {
+      border: 1px solid var(--line); background: var(--panel);
+      padding: 8px 14px; border-radius: 8px; cursor: pointer;
+      font-weight: 500; white-space: nowrap;
+    }
+    .btn:hover { border-color: var(--accent); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn.primary:hover { filter: brightness(1.08); }
+    .btn.danger { color: var(--danger); }
+    .btn:disabled { opacity: .5; cursor: default; }
+    .tabs {
+      max-width: 1400px; margin: 0 auto; padding: 0 16px;
+      display: flex; gap: 4px; overflow-x: auto;
+    }
+    .tab {
+      border: 0; background: none; padding: 10px 14px; cursor: pointer;
+      border-bottom: 3px solid transparent; color: var(--muted); font-weight: 600; white-space: nowrap;
+    }
+    .tab.on { color: var(--accent); border-bottom-color: var(--accent); }
+
+    main { max-width: 1400px; margin: 0 auto; padding: 16px; }
+    .panel { display: none; }
+    .panel.on { display: block; }
+    .card {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+      box-shadow: var(--shadow); padding: 16px; margin-bottom: 16px;
+    }
+    .card h2 { font-size: 16px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+    .card h2 .step {
+      display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+      background: var(--accent); color: #fff; font-size: 12px;
+    }
+    .hint { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+    .row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+    @media (max-width: 900px) { .row2 { grid-template-columns: 1fr; } }
+
+    .info-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+    @media (max-width: 640px) { .info-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+    .field input {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+      background: var(--input-bg);
+    }
+    .field input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+    .title-preview { margin-top: 12px; font-weight: 700; }
+
+    .drop {
+      border: 2px dashed var(--line); border-radius: 10px; padding: 18px; text-align: center;
+      color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s;
+    }
+    .drop.over, .drop:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+    .drop strong { color: var(--text); }
+    .status { margin-top: 10px; font-size: 14px; }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--danger); }
+
+    /* ---------- 데이터 입력 표 ---------- */
+    .grid-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 10px; }
+    .grid-head h2 { margin: 0; }
+    .count { color: var(--muted); font-size: 14px; }
+    .grid-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 8px; max-height: 70vh; }
+    table.grid { border-collapse: separate; border-spacing: 0; min-width: 1500px; width: 100%; }
+    .grid th, .grid td { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 0; }
+    .grid thead th {
+      position: sticky; background: var(--grid-head); font-size: 13px; font-weight: 600;
+      padding: 6px 4px; z-index: 2;
+    }
+    .grid thead tr:first-child th { top: 0; }
+    .grid thead tr:nth-child(2) th { top: 33px; }
+    .grid td.no, .grid th.no {
+      position: sticky; left: 0; background: var(--grid-head); text-align: center; width: 44px;
+      font-size: 13px; color: var(--muted); z-index: 1;
+    }
+    .grid thead th.no { z-index: 3; }
+    .grid input {
+      width: 100%; border: 0; background: var(--input-bg); padding: 7px 8px; min-width: 0;
+      font-size: 14px;
+    }
+    .grid input:focus { outline: 2px solid var(--accent); outline-offset: -2px; position: relative; }
+    .grid tr.moved td input { color: var(--muted); }
+    .grid tr.moved td.no { color: var(--danger); }
+
+    /* ---------- 학생명부 미리보기 (A4) ---------- */
+    .paper-wrap { overflow: auto; padding: 8px 0 24px; }
+    .paper {
+      width: 210mm; margin: 0 auto; padding: 10mm 8mm; background: #fff; color: #000;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, .18);
+    }
+    .sheet {
+      width: 194mm; border-collapse: collapse; table-layout: fixed;
+      font-family: 'Malgun Gothic', '맑은 고딕', 'Noto Sans KR', sans-serif; color: #000;
+    }
+    .sheet td { padding: 0 1px; text-align: center; vertical-align: middle; overflow: hidden; white-space: nowrap; }
+    .sheet .fit > span { display: inline-block; white-space: nowrap; }
+    .sheet .r1 td { height: 11mm; font-size: 18pt; font-weight: 700; }
+    .sheet .r2 td { height: 5mm; }
+    .sheet .r3 td { height: 7mm; font-size: 11pt; font-weight: 700; border-bottom: 2px solid #000; }
+    .sheet .r3 .l { text-align: left; }
+    .sheet .r3 .r { text-align: right; }
+    .sheet .hd td { background: #ffffcc; font-size: 8.5pt; font-weight: 700; border: 1px solid #000; }
+    .sheet .hd1 td { height: 8mm; border-top: 2px solid #000; }
+    .sheet .hd td.two { font-size: 7.5pt; line-height: 1.15; }
+    .sheet .hd2 td { height: 6mm; border-bottom: 3px double #000; }
+    .sheet .d td { height: 7.4mm; font-size: 8.5pt; border: 1px solid #000; }
+    .sheet .d td.addr { font-family: '함초롬바탕', 'HCR Batang', 'Batang', serif; font-size: 9pt; }
+    .sheet .d td.male { background: #dce6f1; }
+    .sheet .d td.female { background: #fde9e9; }
+    .sheet .d td.other { background: #e2efda; }
+    .sheet .first td { border-top: 3px double #000; }
+    .sheet tr > td.L { border-left: 2px solid #000; }
+    .sheet tr > td.R { border-right: 2px solid #000; }
+    .sheet .sum td {
+      height: 8mm; font-size: 11pt; font-weight: 700; border: 1px solid #000;
+      border-top: 3px double #000; border-bottom: 2px solid #000;
+    }
+    .sheet .sum td.y { background: #ffc000; }
+    .legend { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+    .legend i { display: inline-block; width: 14px; height: 14px; border: 1px solid #999; vertical-align: -2px; margin-right: 4px; }
+
+    /* ---------- 합본 ---------- */
+    .files { list-style: none; padding: 0; margin: 12px 0 0; }
+    .files li {
+      display: flex; align-items: center; gap: 12px; padding: 8px 10px;
+      border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px;
+    }
+    .files .tag {
+      min-width: 44px; text-align: center; font-weight: 700; color: var(--accent);
+      background: var(--accent-soft); border-radius: 6px; padding: 2px 6px;
+    }
+    .files .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .files .x { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 18px; }
+    .merge-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-top: 14px; }
+    .merge-bar .field { width: 140px; }
+
+    /* ---------- 알림·대화상자 ---------- */
+    .toast {
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+      background: #1f2937; color: #fff; padding: 10px 18px; border-radius: 10px; opacity: 0;
+      transition: opacity .2s, transform .2s; z-index: 50; max-width: calc(100vw - 32px); pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.warn { background: #b45309; }
+    dialog {
+      border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text);
+      padding: 20px; max-width: min(440px, calc(100vw - 32px));
+    }
+    dialog::backdrop { background: rgba(0, 0, 0, .4); }
+    dialog h3 { margin: 0 0 8px; font-size: 17px; }
+    dialog p { margin: 0 0 14px; color: var(--muted); white-space: pre-line; }
+    .dlg-choices { display: grid; gap: 6px; margin-bottom: 14px; max-height: 50vh; overflow: auto; }
+    .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+    @media (max-width: 640px) {
+      .brand span { display: none; }
+      .actions .btn { padding: 7px 10px; font-size: 14px; }
+    }
+
+    /* ---------- 인쇄: 학생명부 한 장만 ---------- */
+    @page { size: A4 portrait; margin: 0; }
+    @media print {
+      body { background: #fff; }
+      .topbar, .card, .legend, .toast, dialog, .no-print { display: none !important; }
+      main { padding: 0; max-width: none; }
+      .panel { display: none !important; }
+      #panel-sheet { display: block !important; }
+      .paper-wrap { padding: 0; overflow: visible; }
+      .paper { box-shadow: none; margin: 0; }
+      .sheet td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <h1>학생명부 작성 프로그램</h1>
+        <span>입력한 정보는 이 컴퓨터의 브라우저에만 저장됩니다</span>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="btnExport">엑셀 파일 만들기</button>
+        <button class="btn" id="btnPrint">인쇄하기</button>
+        <button class="btn danger" id="btnReset">새로 시작</button>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab on" data-tab="input">① 입력하기</button>
+      <button class="tab" data-tab="sheet">② 학생명부 보기</button>
+      <button class="tab" data-tab="merge">③ 합본 만들기</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ① 입력하기 -->
+    <section class="panel on" id="panel-input">
+      <div class="row2">
+        <div class="card">
+          <h2><span class="step">1</span>기본 정보</h2>
+          <div class="info-grid">
+            <div class="field"><label for="iYear">학년도</label><input id="iYear" inputmode="numeric" placeholder="2027"></div>
+            <div class="field"><label for="iSchool">학교 이름</label><input id="iSchool" placeholder="빛여울"></div>
+            <div class="field"><label for="iGrade">학년</label><input id="iGrade" inputmode="numeric" placeholder="4"></div>
+            <div class="field"><label for="iClass">반</label><input id="iClass" inputmode="numeric" placeholder="9"></div>
+            <div class="field"><label for="iTeacher">담임</label><input id="iTeacher" placeholder="담임 이름"></div>
+          </div>
+          <div class="title-preview" id="titlePreview"></div>
+          <p class="hint">학교 이름은 '초등학교' 없이 적어 주세요. (예: 빛여울 → 빛여울초등학교)</p>
+        </div>
+
+        <div class="card">
+          <h2><span class="step">2</span>NEIS 학생명렬표 불러오기</h2>
+          <div class="drop" id="neisDrop" tabindex="0">
+            <strong>학생명렬표 엑셀 파일</strong>을 여기에 끌어다 놓거나 눌러서 고르세요<br>
+            <small>번호·성명·성별·생년월일·주소가 번호 순서대로 들어갑니다</small>
+          </div>
+          <input type="file" id="neisFile" accept=".xlsx,.xls,.csv" hidden>
+          <div class="status" id="neisStatus"></div>
+          <p class="hint">명렬표의 마지막 학생 번호까지 중 비어 있거나 빠진 번호는 비고에 '전출'로 표시됩니다.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="grid-head">
+          <h2><span class="step">3</span>데이터 입력</h2>
+          <span class="count" id="countText"></span>
+        </div>
+        <p class="hint" style="margin:0 0 10px">엑셀에서 여러 칸을 복사해 붙여 넣을 수 있습니다. Enter·↑·↓ 키로 위아래 칸을 오갑니다. 성별·생년월일·전화번호·학반은 학생명부에서 자동으로 정리됩니다.</p>
+        <div class="grid-wrap">
+          <table class="grid" id="grid"></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ② 학생명부 보기 -->
+    <section class="panel" id="panel-sheet">
+      <div class="legend no-print">
+        <span><i style="background:#dce6f1"></i>남성</span>
+        <span><i style="background:#fde9e9"></i>여성</span>
+        <span><i style="background:#e2efda"></i>다른 지역 주소</span>
+      </div>
+      <div class="paper-wrap">
+        <div class="paper"><table class="sheet" id="sheet"></table></div>
+      </div>
+    </section>
+
+    <!-- ③ 합본 만들기 -->
+    <section class="panel" id="panel-merge">
+      <div class="card">
+        <h2>학급별 학생명부 합치기</h2>
+        <p class="hint" style="margin:0 0 12px">선생님들이 이 프로그램으로 만든 학급별 학생명부 파일을 모아 한 파일로 합칩니다. 시트 이름은 학년-반(예: 4-9)으로 바뀌고 1-1부터 6-9 순서로 정렬됩니다.</p>
+        <div class="drop" id="mergeDrop" tabindex="0">
+          <strong>학급별 학생명부 파일 여러 개</strong>를 끌어다 놓거나 눌러서 고르세요
+        </div>
+        <input type="file" id="mergeFiles" accept=".xlsx" multiple hidden>
+        <div style="margin-top:10px" class="actions">
+          <button class="btn" id="btnFolder" hidden>폴더에서 한꺼번에 불러오기</button>
+          <button class="btn" id="btnClearFiles">목록 비우기</button>
+        </div>
+        <ul class="files" id="fileList"></ul>
+        <div class="merge-bar">
+          <div class="field"><label for="mYear">학년도</label><input id="mYear" inputmode="numeric" placeholder="2027"></div>
+          <button class="btn primary" id="btnMerge">합본 만들기</button>
+        </div>
+        <div class="status" id="mergeStatus"></div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <dialog id="dlg">
+    <h3 id="dlgTitle"></h3>
+    <p id="dlgMsg"></p>
+    <div class="dlg-choices" id="dlgChoices"></div>
+    <div class="dlg-actions" id="dlgActions"></div>
+  </dialog>
+
+<script>
+'use strict';
+
+// =============================================================
+// 기본 설정
+// =============================================================
+const ROWS = 30;
+const STORE_KEY = 'studentregistry.v1';
+
+// 데이터 입력 칸 (학생명부 B~M열 순서)
+const FIELDS = [
+  { k: 'name',     label: '성명',     w: 90 },
+  { k: 'gender',   label: '성별',     w: 64 },
+  { k: 'birth',    label: '생년월일', w: 110 },
+  { k: 'addr',     label: '주소',     w: 380 },
+  { k: 'fName',    label: '이름',     w: 84,  group: '부' },
+  { k: 'fTel',     label: '전화',     w: 124, group: '부' },
+  { k: 'mName',    label: '이름',     w: 84,  group: '모' },
+  { k: 'mTel',     label: '전화',     w: 124, group: '모' },
+  { k: 'sTel',     label: '전화',     w: 124, group: '학생' },
+  { k: 'sibClass', label: '학반',     w: 70,  group: '본교재학 형제자매' },
+  { k: 'sibName',  label: '이름',     w: 84,  group: '본교재학 형제자매' },
+  { k: 'note',     label: '비고',     w: 110 },
+];
+
+// 엑셀 양식의 열 너비(A~M)
+const COL_WIDTHS = [3.5, 6.75, 4.25, 6.375, 20.75, 11.25, 7.875, 10.875, 7.875, 7.875, 3.375, 6.125, 10.125];
+
+const emptyRow = () => Object.fromEntries(FIELDS.map(f => [f.k, '']));
+let state = {
+  info: { year: String(new Date().getFullYear() + 1), school: '빛여울', grade: '', cls: '', teacher: '' },
+  rows: Array.from({ length: ROWS }, emptyRow),
+};
+
+const $ = id => document.getElementById(id);
+
+function load() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+    if (saved && saved.info && Array.isArray(saved.rows)) {
+      state.info = Object.assign(state.info, saved.info);
+      state.rows = Array.from({ length: ROWS }, (_, i) => Object.assign(emptyRow(), saved.rows[i] || {}));
+    }
+  } catch (e) { /* 저장소를 쓸 수 없으면 빈 상태로 시작 */ }
+}
+let saveTimer;
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* 무시 */ }
+  }, 300);
+}
+
+// =============================================================
+// 가공 함수 (엑셀 매크로와 같은 규칙)
+// =============================================================
+const str = v => (v === null || v === undefined) ? '' : String(v).trim();
+const digits = s => str(s).replace(/\D/g, '');
+
+// 성별: 남/남자/남학생 → 남성, 여/여자/여학생 → 여성
+function formatGender(v) {
+  const s = str(v);
+  if (['남자', '남', '남학생'].includes(s)) return '남성';
+  if (['여자', '여', '여학생'].includes(s)) return '여성';
+  return s;
+}
+
+// 생년월일: 2019.03.02. / 2019년 3월 2일 / 19-3-2 / 20190302 → 190302
+function formatBirth(v) {
+  const s = str(v);
+  if (!s) return '';
+  const t = s.replace(/[년월일.\-\/]/g, ' ').trim().split(/\s+/);
+  if (t.length === 3 && t.every(x => /^\d+$/.test(x))) {
+    let [y, m, d] = t;
+    if (y.length === 4) y = y.slice(2);
+    return y.padStart(2, '0') + m.padStart(2, '0') + d.padStart(2, '0');
+  }
+  const g = digits(s);
+  if (g.length === 8) return g.slice(2);
+  if (g.length === 6) return g;
+  return s;
+}
+
+// 주소: 줄바꿈·괄호 내용 삭제, '아파트'→'@', 앞의 시·도 + 구·시·군을 떼어 내고 그 지역을 함께 돌려줌
+const PROVINCES = ['서울', '광주', '전남', '전북', '경남', '경북', '충남', '충북', '경기', '강원', '제주', '세종'];
+function parseAddress(raw) {
+  let s = str(raw).replace(/\r\n|\r|\n/g, ' ');
+  if (!s) return { region: '', short: '' };
+  while (/\([^()]*\)/.test(s)) s = s.replace(/\([^()]*\)/g, '');
+  s = s.replace(/아파트/g, '@').replace(/\s+/g, ' ').replace(/\s+,/g, ',').trim();
+  if (!s) return { region: '', short: '' };
+
+  const tok = s.split(' ');
+  const last = t => t.slice(-1);
+  let region = '', start = 0;
+  if (tok.length >= 2) {
+    const [t0, t1] = tok;
+    if ((['시', '도'].includes(last(t0)) || PROVINCES.includes(t0)) && ['구', '시', '군'].includes(last(t1))) {
+      region = t0 + ' ' + t1; start = 2;
+    } else if (['구', '시', '군'].includes(last(t0))) {
+      region = t0; start = 1;
+    }
+  } else if (['구', '시', '군', '도'].includes(last(tok[0]))) {
+    region = tok[0]; start = 1;
+  }
+  if (!region && ['시', '도'].includes(last(tok[0]))) { region = tok[0]; start = 1; }
+
+  let short = tok.slice(start).join(' ').trim();
+  if (!short) short = s;
+  return { region, short };
+}
+
+// 전화번호: 숫자 8자리 이상이면 뒤 8자리를 XXXX-XXXX로
+function formatPhone(v) {
+  const s = str(v);
+  const g = digits(s);
+  if (g.length >= 8) { const t = g.slice(-8); return t.slice(0, 4) + '-' + t.slice(4); }
+  return s;
+}
+
+// 학반: 3학년 1반 / 3-1 / 3/1 / 31 → 3-1, 숫자 하나 → 3-0
+function formatClass(v) {
+  const s = str(v);
+  if (!s) return '';
+  if (/^\d$/.test(s)) return s + '-0';
+  const h = s.indexOf('학년');
+  if (h >= 0) {
+    const g = digits(s.slice(0, h)), r = digits(s.slice(h + 2));
+    if (g) return g + '-' + (r || '0');
+  }
+  const t = s.replace(/[반\/\-.]/g, ' ').trim().split(/\s+/);
+  if (t.length === 2) {
+    const g = digits(t[0]), r = digits(t[1]);
+    if (g && r) return g + '-' + r;
+  }
+  const g = digits(s);
+  if (g.length === 2) return g[0] + '-' + g[1];
+  if (g.length === 1) return g + '-0';
+  return s;
+}
+
+// 학반에서 학년 숫자 뽑기 (형제자매 학년 확인용, 숫자가 없으면 -1)
+function gradeNum(v) {
+  const s = str(v);
+  if (!s) return 0;
+  const h = s.indexOf('학년');
+  if (h >= 0) { const g = digits(s.slice(0, h)); if (g) return Number(g); }
+  const t = s.replace(/[반\/\-.]/g, ' ').trim().split(/\s+/);
+  if (t.length) {
+    const g = digits(t[0]);
+    if (g.length === 2 && t.length === 1) return Number(g[0]);
+    if (g.length >= 1) return Number(g);
+  }
+  const g = digits(s);
+  if (g.length === 2) return Number(g[0]);
+  if (g.length >= 1) return Number(g);
+  return -1;
+}
+const validSibling = v => { const n = gradeNum(v); return !str(v) || (n >= 1 && n <= 6); };
+
+// 입력 데이터 → 학생명부에 들어갈 값과 색
+function buildRegistry(rows) {
+  const parsed = rows.map(r => parseAddress(r.addr));
+  // 가장 많은 학생이 사는 지역(먼저 나온 지역 우선)
+  const counts = new Map();
+  parsed.forEach(p => { if (p.region) counts.set(p.region, (counts.get(p.region) || 0) + 1); });
+  let mode = '', max = 0;
+  counts.forEach((c, k) => { if (c > max) { max = c; mode = k; } });
+
+  const out = rows.map((r, i) => {
+    const gender = formatGender(r.gender);
+    const p = parsed[i];
+    return {
+      no: i + 1,
+      name: str(r.name),
+      gender,
+      genderClass: gender === '남성' ? 'male' : gender === '여성' ? 'female' : '',
+      birth: formatBirth(r.birth),
+      addr: p.short,
+      addrOther: !!(p.short && p.region && mode && p.region !== mode),
+      fName: str(r.fName), fTel: formatPhone(r.fTel),
+      mName: str(r.mName), mTel: formatPhone(r.mTel),
+      sTel: formatPhone(r.sTel),
+      sibClass: formatClass(r.sibClass), sibName: str(r.sibName),
+      note: str(r.note),
+    };
+  });
+  const male = out.filter(r => r.gender === '남성').length;
+  const female = out.filter(r => r.gender === '여성').length;
+  return { rows: out, male, female, sumText: `남성 ${male}명, 여성 ${female}명, 총 ${male + female}명` };
+}
+
+function titleText() {
+  const { grade, cls } = state.info;
+  return `${str(grade) || '○'}학년 ${str(cls) || '○'}반 학생명부`;
+}
+function schoolText() {
+  const { year, school } = state.info;
+  let sc = str(school);
+  if (sc && !/초등학교$/.test(sc)) sc += '초등학교';
+  return `${str(year) || '○○○○'}학년도 ${sc}`;
+}
+
+// =============================================================
+// 화면: 탭
+// =============================================================
+let curTab = 'input';
+function showTab(name) {
+  curTab = name;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.tab === name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', p.id === 'panel-' + name));
+  if (name === 'sheet') renderSheet();
+  if (name === 'merge' && !str($('mYear').value)) $('mYear').value = str(state.info.year);
+}
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => showTab(t.dataset.tab)));
+
+// =============================================================
+// 화면: 기본 정보
+// =============================================================
+const INFO_INPUTS = { iYear: 'year', iSchool: 'school', iGrade: 'grade', iClass: 'cls', iTeacher: 'teacher' };
+function renderInfo() {
+  for (const [id, k] of Object.entries(INFO_INPUTS)) $(id).value = state.info[k] || '';
+  $('titlePreview').textContent = `${schoolText()} · ${titleText()}`;
+}
+for (const [id, k] of Object.entries(INFO_INPUTS)) {
+  $(id).addEventListener('input', e => {
+    state.info[k] = e.target.value;
+    $('titlePreview').textContent = `${schoolText()} · ${titleText()}`;
+    save();
+  });
+}
+
+// =============================================================
+// 화면: 데이터 입력 표
+// =============================================================
+function renderGrid() {
+  const g = $('grid');
+  let h1 = '<thead><tr><th class="no" rowspan="2">번호</th>';
+  let h2 = '<tr>';
+  for (let i = 0; i < FIELDS.length; i++) {
+    const f = FIELDS[i];
+    if (!f.group) { h1 += `<th rowspan="2" style="width:${f.w}px">${f.label}</th>`; continue; }
+    if (i === 0 || FIELDS[i - 1].group !== f.group) {
+      const span = FIELDS.filter(x => x.group === f.group).length;
+      h1 += `<th colspan="${span}">${f.group}</th>`;
+    }
+    h2 += `<th style="width:${f.w}px">${f.label}</th>`;
+  }
+  let body = '<tbody>';
+  for (let r = 0; r < ROWS; r++) {
+    body += `<tr data-r="${r}"><td class="no">${r + 1}</td>`;
+    FIELDS.forEach((f, c) => {
+      body += `<td><input data-r="${r}" data-c="${c}" aria-label="${r + 1}번 ${f.group ? f.group + ' ' : ''}${f.label}"></td>`;
+    });
+    body += '</tr>';
+  }
+  g.innerHTML = h1 + '</tr>' + h2 + '</tr></thead>' + body + '</tbody>';
+  fillGrid();
+}
+function fillGrid() {
+  $('grid').querySelectorAll('input').forEach(inp => {
+    inp.value = state.rows[inp.dataset.r][FIELDS[inp.dataset.c].k] || '';
+  });
+  markRows();
+}
+function markRows() {
+  $('grid').querySelectorAll('tbody tr').forEach(tr => {
+    tr.classList.toggle('moved', str(state.rows[tr.dataset.r].note) === '전출');
+  });
+  const reg = buildRegistry(state.rows);
+  $('countText').textContent = reg.sumText;
+}
+
+const cellInput = (r, c) => $('grid').querySelector(`input[data-r="${r}"][data-c="${c}"]`);
+
+$('grid').addEventListener('input', e => {
+  const t = e.target;
+  if (!t.dataset.r) return;
+  state.rows[t.dataset.r][FIELDS[t.dataset.c].k] = t.value;
+  markRows();
+  save();
+});
+
+// 형제자매 학반은 칸을 벗어날 때 1~6학년인지 확인
+$('grid').addEventListener('change', e => {
+  const t = e.target;
+  if (!t.dataset.r || FIELDS[t.dataset.c].k !== 'sibClass') return;
+  if (!validSibling(t.value)) {
+    toast('본교 재학생만 입력해 주세요 (1~6학년)', true);
+    t.value = '';
+    state.rows[t.dataset.r].sibClass = '';
+    save();
+  }
+});
+
+$('grid').addEventListener('keydown', e => {
+  const t = e.target;
+  if (!t.dataset.r || e.isComposing) return;
+  const r = +t.dataset.r, c = +t.dataset.c;
+  let nr = null;
+  if (e.key === 'Enter' || e.key === 'ArrowDown') nr = r + 1;
+  else if (e.key === 'ArrowUp') nr = r - 1;
+  if (nr === null) return;
+  e.preventDefault();
+  const next = cellInput(Math.max(0, Math.min(ROWS - 1, nr)), c);
+  next.focus(); next.select();
+});
+
+// 엑셀에서 여러 칸을 복사해 붙여 넣기
+$('grid').addEventListener('paste', e => {
+  const t = e.target;
+  if (!t.dataset.r) return;
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  if (!/[\t\n]/.test(text.replace(/\r?\n$/, ''))) return; // 한 칸짜리는 기본 동작
+  e.preventDefault();
+  const lines = text.replace(/\r/g, '').replace(/\n$/, '').split('\n');
+  const r0 = +t.dataset.r, c0 = +t.dataset.c;
+  let cleared = 0;
+  lines.forEach((line, i) => {
+    const r = r0 + i;
+    if (r >= ROWS) return;
+    line.split('\t').forEach((val, j) => {
+      const c = c0 + j;
+      if (c >= FIELDS.length) return;
+      let v = val.replace(/^"|"$/g, '').trim();
+      if (FIELDS[c].k === 'sibClass' && !validSibling(v)) { v = ''; cleared++; }
+      state.rows[r][FIELDS[c].k] = v;
+    });
+  });
+  fillGrid();
+  save();
+  if (lines.length + r0 > ROWS) toast(`${ROWS}번까지만 붙여 넣었습니다`, true);
+  else if (cleared) toast(`형제자매 학반 ${cleared}칸은 1~6학년이 아니라서 비웠습니다`, true);
+  else toast('붙여 넣었습니다');
+});
+
+// =============================================================
+// 화면: 학생명부 미리보기·인쇄
+// =============================================================
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+function renderSheet() {
+  const reg = buildRegistry(state.rows);
+  const total = COL_WIDTHS.reduce((a, b) => a + b, 0);
+  const cols = COL_WIDTHS.map(w => `<col style="width:${(w / total * 100).toFixed(3)}%">`).join('');
+  const td = (v, cls = '') => `<td class="fit ${cls}"><span>${esc(v)}</span></td>`;
+  let h = `<colgroup>${cols}</colgroup>`;
+  h += `<tr class="r1"><td colspan="13" class="fit"><span>${esc(titleText())}</span></td></tr>`;
+  h += `<tr class="r2"><td colspan="13"></td></tr>`;
+  h += `<tr class="r3"><td colspan="10" class="l">${esc(schoolText())}</td><td colspan="2" class="r">담임: </td><td>${esc(str(state.info.teacher))}</td></tr>`;
+  h += `<tr class="hd hd1">
+    <td rowspan="2" class="L">번호</td><td rowspan="2">성명</td><td rowspan="2">성별</td><td>생년</td>
+    <td rowspan="2">주소</td><td colspan="2">부</td><td colspan="2">모</td><td>학생</td>
+    <td colspan="2" class="two">본교재학<br>형제자매</td><td rowspan="2" class="R">비고</td></tr>`;
+  h += `<tr class="hd hd2"><td>월일</td><td>이름</td><td>전화</td><td>이름</td><td>전화</td><td>전화</td><td>학반</td><td>이름</td></tr>`;
+  reg.rows.forEach((r, i) => {
+    h += `<tr class="d${i === 0 ? ' first' : ''}">` +
+      `<td class="L">${r.no}</td>` + td(r.name) + td(r.gender, r.genderClass) + td(r.birth) +
+      td(r.addr, 'addr' + (r.addrOther ? ' other' : '')) +
+      td(r.fName) + td(r.fTel) + td(r.mName) + td(r.mTel) + td(r.sTel) +
+      td(r.sibClass) + td(r.sibName) + td(r.note, 'R') + '</tr>';
+  });
+  h += `<tr class="sum"><td class="y L">합계</td><td colspan="4" class="y">${esc(reg.sumText)}</td>` +
+    '<td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="R"></td></tr>';
+  $('sheet').innerHTML = h;
+  fitSheet();
+}
+// 엑셀의 '셀에 맞춤'처럼 칸보다 긴 글자는 작게 줄임
+function fitSheet() {
+  $('sheet').querySelectorAll('td.fit > span').forEach(sp => {
+    sp.style.fontSize = '';
+    const td = sp.parentElement;
+    const room = td.clientWidth - 2;
+    if (room <= 0) return;
+    let size = parseFloat(getComputedStyle(sp).fontSize);
+    while (sp.offsetWidth > room && size > 5) {
+      size -= 0.5;
+      sp.style.fontSize = size + 'px';
+    }
+  });
+}
+
+let prevTab = null;
+window.addEventListener('beforeprint', () => {
+  if (curTab !== 'sheet') { prevTab = curTab; showTab('sheet'); }
+  else renderSheet();
+});
+window.addEventListener('afterprint', () => { if (prevTab) { showTab(prevTab); prevTab = null; } });
+$('btnPrint').addEventListener('click', () => window.print());
+
+// =============================================================
+// 엑셀 파일 만들기 (ExcelJS)
+// =============================================================
+const XL_FONT = '맑은 고딕';
+function xlBorder(top, left, bottom, right) {
+  const b = s => ({ style: s });
+  return { top: b(top), left: b(left), bottom: b(bottom), right: b(right) };
+}
+const fill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+
+function buildWorksheet(wb) {
+  const reg = buildRegistry(state.rows);
+  const sheetName = (str(state.info.grade) && str(state.info.cls))
+    ? `${str(state.info.grade)}학년 ${str(state.info.cls)}반` : '학생명부';
+  const ws = wb.addWorksheet(sheetName, {
+    pageSetup: {
+      paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 1,
+      horizontalCentered: true, printArea: 'A1:M36',
+      margins: { left: 0.25, right: 0.25, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 },
+    },
+    views: [{ showGridLines: false }],
+  });
+  ws.columns = COL_WIDTHS.map(w => ({ width: w }));
+  [31.5, 17.25, 18, 24, 17.25].forEach((h, i) => { ws.getRow(i + 1).height = h; });
+  for (let r = 6; r <= 36; r++) ws.getRow(r).height = 22.5;
+
+  const center = { horizontal: 'center', vertical: 'middle', shrinkToFit: true };
+
+  // 1행 제목, 3행 학교·담임
+  ws.mergeCells('A1:M1');
+  Object.assign(ws.getCell('A1'), {
+    value: titleText(), font: { name: XL_FONT, size: 20, bold: true }, alignment: { horizontal: 'center', vertical: 'middle' },
+  });
+  ws.mergeCells('A3:J3');
+  ws.getCell('A3').value = schoolText();
+  ws.mergeCells('K3:L3');
+  ws.getCell('K3').value = '담임: ';
+  ws.getCell('M3').value = str(state.info.teacher);
+  for (let c = 1; c <= 13; c++) {
+    const cell = ws.getRow(3).getCell(c);
+    cell.font = { name: XL_FONT, size: 12, bold: true };
+    cell.alignment = { horizontal: c <= 10 ? 'left' : c <= 12 ? 'right' : 'center', vertical: 'middle' };
+    cell.border = { bottom: { style: 'medium' } };
+  }
+
+  // 4~5행 머리글
+  const head = [
+    ['A4:A5', '번호'], ['B4:B5', '성명'], ['C4:C5', '성별'], ['D4', '생년'], ['D5', '월일'], ['E4:E5', '주소'],
+    ['F4:G4', '부'], ['F5', '이름'], ['G5', '전화'], ['H4:I4', '모'], ['H5', '이름'], ['I5', '전화'],
+    ['J4', '학생'], ['J5', '전화'], ['K4:L4', '본교재학\n형제자매'], ['K5', '학반'], ['L5', '이름'], ['M4:M5', '비고'],
+  ];
+  head.forEach(([rng, v]) => {
+    if (rng.includes(':')) ws.mergeCells(rng);
+    ws.getCell(rng.split(':')[0]).value = v;
+  });
+  for (let r = 4; r <= 5; r++) {
+    for (let c = 1; c <= 13; c++) {
+      const cell = ws.getRow(r).getCell(c);
+      cell.font = { name: XL_FONT, size: 9, bold: true };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.fill = fill('FFFFFFCC');
+      cell.border = xlBorder(r === 4 ? 'medium' : 'thin', c === 1 ? 'medium' : 'thin', r === 5 ? 'double' : 'thin', c === 13 ? 'medium' : 'thin');
+    }
+  }
+
+  // 6~35행 학생
+  const keys = ['name', 'gender', 'birth', 'addr', 'fName', 'fTel', 'mName', 'mTel', 'sTel', 'sibClass', 'sibName', 'note'];
+  reg.rows.forEach((d, i) => {
+    const r = 6 + i;
+    const row = ws.getRow(r);
+    for (let c = 1; c <= 13; c++) {
+      const cell = row.getCell(c);
+      const v = c === 1 ? d.no : d[keys[c - 2]];
+      cell.value = (v === '' ? null : v);
+      cell.font = c === 5 ? { name: '함초롬바탕', size: 10 } : { name: XL_FONT, size: 9 };
+      cell.alignment = center;
+      if (c > 1) cell.numFmt = '@';
+      cell.border = xlBorder(i === 0 ? 'double' : 'thin', c === 1 ? 'medium' : 'thin', 'thin', c === 13 ? 'medium' : 'thin');
+    }
+    if (d.genderClass === 'male') row.getCell(3).fill = fill('FFDCE6F1');
+    if (d.genderClass === 'female') row.getCell(3).fill = fill('FFFDE9E9');
+    if (d.addrOther) row.getCell(5).fill = fill('FFE2EFDA');
+  });
+
+  // 36행 합계
+  ws.mergeCells('B36:E36');
+  ws.getCell('A36').value = '합계';
+  ws.getCell('B36').value = {
+    formula: '"남성 "&COUNTIF(C6:C35,"남성")&"명, 여성 "&COUNTIF(C6:C35,"여성")&"명, 총 "&(COUNTIF(C6:C35,"남성")+COUNTIF(C6:C35,"여성"))&"명"',
+    result: reg.sumText,
+  };
+  for (let c = 1; c <= 13; c++) {
+    const cell = ws.getRow(36).getCell(c);
+    cell.font = { name: XL_FONT, size: c <= 5 ? 12 : 9, bold: true };
+    cell.alignment = center;
+    if (c <= 5) cell.fill = fill('FFFFC000');
+    cell.border = xlBorder('double', c === 1 ? 'medium' : 'thin', 'medium', c === 13 ? 'medium' : 'thin');
+  }
+  return ws;
+}
+
+function safeFileName(s) { return s.replace(/[\\\/:*?"<>|]/g, '_').trim(); }
+function download(buffer, fileName) {
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+$('btnExport').addEventListener('click', async () => {
+  if (!str(state.info.grade) || !str(state.info.cls)) {
+    showTab('input');
+    toast('기본 정보에 학년과 반을 먼저 적어 주세요', true);
+    $(str(state.info.grade) ? 'iClass' : 'iGrade').focus();
+    return;
+  }
+  try {
+    const wb = new ExcelJS.Workbook();
+    buildWorksheet(wb);
+    const buf = await wb.xlsx.writeBuffer();
+    const name = safeFileName(titleText()) + '.xlsx';
+    download(buf, name);
+    toast(`[${name}] 파일을 내려받았습니다`);
+  } catch (err) {
+    console.error(err);
+    toast('엑셀 파일을 만들지 못했습니다: ' + err.message, true);
+  }
+});
+
+// =============================================================
+// NEIS 학생명렬표 불러오기 (SheetJS)
+// =============================================================
+function pickFile(dropEl, inputEl, onFiles) {
+  dropEl.addEventListener('click', () => inputEl.click());
+  dropEl.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inputEl.click(); } });
+  inputEl.addEventListener('change', () => { if (inputEl.files.length) onFiles([...inputEl.files]); inputEl.value = ''; });
+  dropEl.addEventListener('dragover', e => { e.preventDefault(); dropEl.classList.add('over'); });
+  dropEl.addEventListener('dragleave', () => dropEl.classList.remove('over'));
+  dropEl.addEventListener('drop', e => {
+    e.preventDefault();
+    dropEl.classList.remove('over');
+    if (e.dataTransfer.files.length) onFiles([...e.dataTransfer.files]);
+  });
+}
+
+function cellText(v) {
+  if (v instanceof Date) {
+    const p = n => String(n).padStart(2, '0');
+    return `${v.getFullYear()}.${p(v.getMonth() + 1)}.${p(v.getDate())}`;
+  }
+  return str(v);
+}
+
+// 머리글 행과 열 위치 찾기 (같은 이름 우선, 없으면 포함된 이름)
+function findHeader(rows) {
+  for (let r = 0; r < Math.min(rows.length, 10); r++) {
+    const row = rows[r].map(cellText);
+    if (!row.some(v => v.includes('성명'))) continue;
+    const col = name => {
+      let i = row.findIndex(v => v === name);
+      if (i < 0) i = row.findIndex(v => v.includes(name));
+      return i;
+    };
+    return {
+      row: r,
+      no: col('번호'), name: col('성명'), gender: col('성별'), birth: col('생년월일'), addr: col('주소'),
+      grade: row.findIndex(v => v === '학년'), cls: row.findIndex(v => v === '반'),
+    };
+  }
+  return null;
+}
+
+async function importNeis(file) {
+  const st = $('neisStatus');
+  st.className = 'status';
+  st.textContent = '읽는 중…';
+  try {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: '' });
+    const hd = findHeader(rows);
+    if (!hd || hd.no < 0 || hd.name < 0) throw new Error('번호·성명 머리글을 찾지 못했습니다. NEIS 학생명렬표가 맞는지 확인해 주세요.');
+
+    let list = rows.slice(hd.row + 1).map(r => ({
+      grade: hd.grade >= 0 ? digits(cellText(r[hd.grade])) : '',
+      cls: hd.cls >= 0 ? digits(cellText(r[hd.cls])) : '',
+      no: digits(cellText(r[hd.no])),
+      name: cellText(r[hd.name]),
+      gender: hd.gender >= 0 ? cellText(r[hd.gender]) : '',
+      birth: hd.birth >= 0 ? cellText(r[hd.birth]) : '',
+      addr: hd.addr >= 0 ? cellText(r[hd.addr]) : '',
+    })).filter(x => x.no);
+
+    // 여러 학급이 들어 있는 명렬표면 학급 고르기
+    const classes = [...new Set(list.filter(x => x.grade && x.cls).map(x => `${x.grade}-${x.cls}`))]
+      .sort((a, b) => classKey(a) - classKey(b));
+    if (classes.length > 1) {
+      const mine = `${digits(state.info.grade)}-${digits(state.info.cls)}`;
+      let pick = classes.includes(mine) ? mine : null;
+      if (!pick) {
+        pick = await choose('학급 고르기', '명렬표에 여러 학급이 들어 있습니다. 불러올 학급을 골라 주세요.',
+          classes.map(k => {
+            const [g, c] = k.split('-');
+            return { value: k, label: `${g}학년 ${c}반 (${list.filter(x => `${x.grade}-${x.cls}` === k && x.name).length}명)` };
+          }));
+        if (!pick) { st.textContent = '불러오기를 취소했습니다.'; return; }
+      }
+      list = list.filter(x => `${x.grade}-${x.cls}` === pick);
+    }
+    if (!list.length) throw new Error('학생 자료가 없습니다.');
+
+    // 기존 입력이 있으면 확인
+    const filled = state.rows.some(r => str(r.name) || str(r.gender) || str(r.birth) || str(r.addr));
+    if (filled) {
+      const ok = await confirmBox('명렬표 불러오기',
+        '이미 입력된 성명·성별·생년월일·주소를 명렬표 내용으로 바꿉니다.\n부모 이름·전화번호 등 나머지 칸은 그대로 둡니다.', '바꾸기');
+      if (!ok) { st.textContent = '불러오기를 취소했습니다.'; return; }
+    }
+
+    // 학년·반이 비어 있으면 명렬표에서 채움
+    if (list[0].grade && !str(state.info.grade)) state.info.grade = list[0].grade;
+    if (list[0].cls && !str(state.info.cls)) state.info.cls = list[0].cls;
+
+    // 성명이 있는 마지막 번호까지만 전출 여부 판단 (가나다 정렬 없이 번호 순서 유지)
+    const maxNo = Math.max(0, ...list.filter(x => x.name).map(x => Number(x.no)));
+    let added = 0, moved = 0;
+    for (let n = 1; n <= ROWS; n++) {
+      const row = state.rows[n - 1];
+      if (n > maxNo) continue;
+      const hit = list.find(x => Number(x.no) === n);
+      if (hit && hit.name) {
+        row.name = hit.name;
+        if (hit.gender) row.gender = hit.gender;
+        if (hit.birth) row.birth = hit.birth;
+        if (hit.addr) row.addr = hit.addr;
+        if (str(row.note) === '전출') row.note = '';
+        added++;
+      } else {
+        row.name = ''; row.gender = ''; row.birth = ''; row.addr = '';
+        row.note = '전출';
+        moved++;
+      }
+    }
+    renderInfo();
+    fillGrid();
+    save();
+    st.className = 'status ok';
+    st.textContent = `${file.name}: ${added}명을 불러왔습니다` + (moved ? ` (전출 ${moved}명)` : '') + '.';
+    if (maxNo > ROWS) {
+      st.className = 'status err';
+      st.textContent += ` 학생명부는 ${ROWS}번까지만 들어가므로 ${ROWS + 1}번부터는 빠졌습니다.`;
+    }
+  } catch (err) {
+    console.error(err);
+    st.className = 'status err';
+    st.textContent = err.message || '파일을 읽지 못했습니다.';
+  }
+}
+pickFile($('neisDrop'), $('neisFile'), files => importNeis(files[0]));
+
+// =============================================================
+// 합본 만들기 (ExcelJS)
+// =============================================================
+let mergeItems = []; // { file, wb, ws, sheetName, key, yearHint }
+
+function classKey(name) {
+  const p = str(name).replace(/\D+/g, ' ').trim().split(' ');
+  return p.length >= 2 && p[0] && p[1] ? Number(p[0]) * 1000 + Number(p[1]) : 999999;
+}
+function classSheetName(txt) {
+  const p = str(txt).replace(/\D+/g, ' ').trim().split(' ');
+  return p.length >= 2 && p[0] && p[1] ? `${Number(p[0])}-${Number(p[1])}` : '';
+}
+
+async function addMergeFiles(files) {
+  const st = $('mergeStatus');
+  st.className = 'status';
+  let skipped = 0;
+  for (const file of files) {
+    if (!/\.xlsx$/i.test(file.name) || file.name.startsWith('~$') || file.name.includes('학년도')) { skipped++; continue; }
+    if (mergeItems.some(m => m.file.name === file.name && m.file.size === file.size)) continue;
+    try {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(await file.arrayBuffer());
+      const ws = wb.worksheets[0];
+      if (!ws) { skipped++; continue; }
+      // 시트 이름 → 파일 이름 → 제목(A1) 순서로 학년-반 찾기
+      const title = cellText(ws.getCell('A1').text);
+      const sheetName = classSheetName(ws.name) || classSheetName(file.name) || classSheetName(title) || file.name.replace(/\.xlsx$/i, '').slice(0, 31);
+      const yearHint = (cellText(ws.getCell('A3').text).match(/(\d{4})\s*학년도/) || [])[1] || '';
+      mergeItems.push({ file, ws, sheetName, key: classKey(sheetName), yearHint });
+    } catch (err) {
+      console.error(err);
+      skipped++;
+    }
+  }
+  mergeItems.sort((a, b) => a.key - b.key || a.file.name.localeCompare(b.file.name, 'ko'));
+  if (!str($('mYear').value)) $('mYear').value = mergeItems.find(m => m.yearHint)?.yearHint || str(state.info.year);
+  renderFileList();
+  st.textContent = skipped ? `학생명부가 아닌 파일 ${skipped}개는 건너뛰었습니다.` : '';
+}
+
+function renderFileList() {
+  const names = mergeItems.map(m => m.sheetName);
+  $('fileList').innerHTML = mergeItems.map((m, i) => {
+    const dup = names.indexOf(m.sheetName) !== i;
+    return `<li><span class="tag">${esc(m.sheetName)}</span><span class="name">${esc(m.file.name)}${dup ? ' <b style="color:var(--danger)">· 학반 중복</b>' : ''}</span>` +
+      `<button class="x" data-i="${i}" aria-label="빼기">×</button></li>`;
+  }).join('') || '<li style="justify-content:center;color:var(--muted)">아직 고른 파일이 없습니다</li>';
+}
+$('fileList').addEventListener('click', e => {
+  const b = e.target.closest('.x');
+  if (!b) return;
+  mergeItems.splice(+b.dataset.i, 1);
+  renderFileList();
+});
+$('btnClearFiles').addEventListener('click', () => { mergeItems = []; renderFileList(); $('mergeStatus').textContent = ''; });
+pickFile($('mergeDrop'), $('mergeFiles'), addMergeFiles);
+
+// 폴더 통째로 고르기 (크롬·엣지)
+if (window.showDirectoryPicker) {
+  $('btnFolder').hidden = false;
+  $('btnFolder').addEventListener('click', async () => {
+    try {
+      const dir = await window.showDirectoryPicker();
+      const files = [];
+      for await (const entry of dir.values()) {
+        if (entry.kind === 'file' && /\.xlsx$/i.test(entry.name) && entry.name.includes('학생명부')) files.push(await entry.getFile());
+      }
+      if (!files.length) { toast('폴더에 학생명부 파일이 없습니다', true); return; }
+      await addMergeFiles(files);
+    } catch (err) {
+      if (err.name !== 'AbortError') toast('폴더를 읽지 못했습니다', true);
+    }
+  });
+}
+
+// 한 시트를 서식째 새 통합 문서로 옮김
+function copySheet(src, dst) {
+  (src.model.merges || []).forEach(rng => { try { dst.mergeCells(rng); } catch (e) { /* 겹침 무시 */ } });
+  for (let c = 1; c <= src.columnCount; c++) {
+    const col = src.getColumn(c);
+    if (col.width) dst.getColumn(c).width = col.width;
+    if (col.hidden) dst.getColumn(c).hidden = true;
+  }
+  src.eachRow({ includeEmpty: true }, (row, r) => {
+    const out = dst.getRow(r);
+    if (row.height) out.height = row.height;
+    row.eachCell({ includeEmpty: true }, (cell, c) => {
+      const t = out.getCell(c);
+      if (!cell.isMerged || cell.master.address === cell.address) {
+        const v = cell.value;
+        t.value = (v && typeof v === 'object' && v.sharedFormula) ? (cell.result ?? null) : v;
+      }
+      t.style = JSON.parse(JSON.stringify(cell.style || {}));
+    });
+  });
+  dst.pageSetup = JSON.parse(JSON.stringify(src.pageSetup || {}));
+  dst.headerFooter = JSON.parse(JSON.stringify(src.headerFooter || {}));
+  dst.views = [{ showGridLines: src.views?.[0]?.showGridLines !== false }];
+}
+
+$('btnMerge').addEventListener('click', async () => {
+  const st = $('mergeStatus');
+  if (!mergeItems.length) { st.className = 'status err'; st.textContent = '합칠 학생명부 파일을 먼저 골라 주세요.'; return; }
+  const year = digits($('mYear').value) || '0000';
+  try {
+    const wb = new ExcelJS.Workbook();
+    const used = new Set();
+    for (const m of mergeItems) {
+      let name = m.sheetName, n = 2;
+      while (used.has(name)) name = `${m.sheetName} (${n++})`;
+      used.add(name);
+      copySheet(m.ws, wb.addWorksheet(name));
+    }
+    const fileName = `${year}학년도 학생명부.xlsx`;
+    download(await wb.xlsx.writeBuffer(), fileName);
+    st.className = 'status ok';
+    st.textContent = `총 ${mergeItems.length}개 파일을 합쳐 [${fileName}] 파일을 만들었습니다.`;
+  } catch (err) {
+    console.error(err);
+    st.className = 'status err';
+    st.textContent = '합본을 만들지 못했습니다: ' + err.message;
+  }
+});
+
+// =============================================================
+// 새로 시작
+// =============================================================
+$('btnReset').addEventListener('click', async () => {
+  const ok = await confirmBox('새로 시작',
+    '입력한 학생 정보를 모두 지웁니다. 기본 정보(학년도·학교·학년·반·담임)는 남겨 둡니다.\n지운 내용은 되돌릴 수 없습니다.', '모두 지우기');
+  if (!ok) return;
+  state.rows = Array.from({ length: ROWS }, emptyRow);
+  $('neisStatus').textContent = '';
+  fillGrid();
+  save();
+  if (curTab === 'sheet') renderSheet();
+  toast('학생 정보를 모두 지웠습니다');
+});
+
+// =============================================================
+// 알림·대화상자
+// =============================================================
+let toastTimer;
+function toast(msg, warn) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (warn ? ' warn' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = 'toast'; }, 2800);
+}
+function openDialog(title, msg, choices, actions) {
+  return new Promise(resolve => {
+    const d = $('dlg');
+    $('dlgTitle').textContent = title;
+    $('dlgMsg').textContent = msg;
+    const done = v => { d.close(); resolve(v); };
+    $('dlgChoices').innerHTML = '';
+    choices.forEach(c => {
+      const b = document.createElement('button');
+      b.className = 'btn'; b.textContent = c.label;
+      b.onclick = () => done(c.value);
+      $('dlgChoices').appendChild(b);
+    });
+    $('dlgActions').innerHTML = '';
+    actions.forEach(a => {
+      const b = document.createElement('button');
+      b.className = 'btn ' + (a.cls || ''); b.textContent = a.label;
+      b.onclick = () => done(a.value);
+      $('dlgActions').appendChild(b);
+    });
+    d.oncancel = e => { e.preventDefault(); done(null); };
+    d.showModal();
+  });
+}
+const confirmBox = (title, msg, okLabel) =>
+  openDialog(title, msg, [], [{ label: '취소', value: false }, { label: okLabel, value: true, cls: 'primary' }]).then(Boolean);
+const choose = (title, msg, choices) => openDialog(title, msg, choices, [{ label: '취소', value: null }]);
+
+// =============================================================
+// 시작
+// =============================================================
+load();
+renderInfo();
+renderGrid();
+renderFileList();
+</script>
+</body>
+</html>
